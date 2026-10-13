@@ -1,0 +1,174 @@
+INSTRUCCIONES DE USO — WiFi WPS Tester
+======================================
+
+0. AVISO LEGAL (leer antes de usar)
+-----------------------------------
+Esta herramienta es para auditar TU PROPIA red o redes sobre las
+que tengas AUTORIZACIÓN ESCRITA de su propietario. Probar o atacar
+redes WiFi ajenas sin permiso es ilegal en la mayoría de países.
+El uso de esta herramienta es bajo tu propia responsabilidad.
+
+
+1. REQUISITOS
+-------------
+- Linux (Kali, Parrot, Debian, Ubuntu, Arch...). En Windows NO
+  funciona el ataque (hace falta modo monitor).
+- Un adaptador WiFi con soporte de MODO MONITOR (la mayoría de
+  antenas USB tipo Alfa AWUS036ACH, TP-Link TL-WN722N v1, etc.).
+- Ejecución como root.
+- Herramientas externas:
+    aircrack-ng  (airmon-ng, airodump-ng)
+    reaver       (incluye wash)
+    bully        (alternativa a reaver, más rápida)
+  Kali/Parrot ya las traen instaladas por defecto.
+- Opcional: nmcli (para verificar la conexión al final).
+
+
+2. INSTALACIÓN DE DEPENDENCIAS (solo si falta alguna)
+-----------------------------------------------------
+  sudo python3 wifi_wps_tester.py --install-deps
+
+Eso equivale (en Debian/Kali) a:
+  sudo apt install aircrack-ng reaver bully
+
+En Arch, 'bully' puede requerir AUR:  yay -S bully
+
+
+3. USO PASO A PASO
+------------------
+1) Conecta la antena USB y verifica que Linux la detecta:
+     iw dev
+
+2) Entra en la carpeta donde está el script y ejecútalo como root:
+     cd /ruta/de/los/archivos
+     sudo python3 wifi_wps_tester.py
+
+3) La herramienta hará lo siguiente, preguntándote en cada paso:
+
+   a) Lista las interfaces WiFi y marca las que son USB.
+      Eliges la antena (o la pasas con --iface).
+
+   b) Pregunta si liberar la interfaz con "airmon-ng check kill"
+      (recomendado: S).
+
+   c) Activa el modo monitor con "airmon-ng start"
+      (la interfaz pasa a llamarse, por ejemplo, wlan0mon).
+
+   d) Escanea con "wash" (30 s por defecto). Solo aparecen redes
+      con WPS activo. Puedes pulsar Ctrl+C para parar antes.
+
+   e) Captura 10 s con "airodump-ng" para mostrar los nombres
+      de red (ESSID) junto a cada BSSID.
+
+   f) Eliges la red objetivo escribiendo su número.
+
+   g) Eliges el método de prueba:
+        [1] Fuerza bruta WPS completa (puede tardar HORAS)
+        [2] Probar un PIN concreto de 8 dígitos (rápido)
+
+   h) Eliges la herramienta de ataque (bully o reaver) si tienes
+      ambas instaladas.
+
+   i) Confirmas y comienza el ataque. La salida en vivo se muestra
+      por pantalla. Pulsa Ctrl+C para detener antes de tiempo.
+
+   j) Si se obtiene la clave WPA, te ofrece verificar la conexión
+      real con nmcli.
+
+   k) Al terminar (o al cancelar) se restaura el modo managed
+      con "airmon-ng stop" y se guardan los resultados en un .txt.
+
+
+4. OPCIONES DE LÍNEA DE COMANDOS
+--------------------------------
+  sudo python3 wifi_wps_tester.py --iface wlan1
+  sudo python3 wifi_wps_tester.py --scan-seconds 60
+  sudo python3 wifi_wps_tester.py --attack-minutes 120
+  sudo python3 wifi_wps_tester.py --output mis_resultados.txt
+  sudo python3 wifi_wps_tester.py --full-log        (log completo)
+  sudo python3 wifi_wps_tester.py --no-essid-scan   (salta el paso e)
+  sudo python3 wifi_wps_tester.py --install-deps    (instala y sale)
+
+
+5. INTERPRETACIÓN DE LOS RESULTADOS (resultados_wps_*.txt)
+----------------------------------------------------------
+- "VULNERABLE - PIN WPS obtenido":
+  El router es vulnerable a ataques WPS. En el txt aparecen el
+  PIN WPS y la CLAVE WPA. Desactiva el WPS en ese router.
+
+- "SIN ÉXITO - no se obtuvo el PIN en el tiempo dado":
+  Causas frecuentes:
+    * El router bloquea WPS tras varios intentos (espera 30-60 min
+      o reinícialo antes de reintentar).
+    * El WPS está realmente desactivado en el router.
+    * Señal débil (acércate o usa mejor antena).
+    * Simplemente falta de tiempo (sube --attack-minutes).
+
+- "PIN manual incorrecto": el PIN de 8 dígitos que probaste no
+  es el del router.
+
+- "Conexión verificada: SI": la clave obtenida funciona y se
+  pudo conectar a la red.
+
+
+6. SOLUCIÓN DE PROBLEMAS
+------------------------
+- "No se encontraron interfaces WiFi": la antena no está
+  conectada o el driver no la soporta. Prueba "dmesg | tail"
+  tras conectarla.
+
+- "No se pudo verificar el modo monitor": driver incorrecto.
+  Para chipsets Realtek RTL8812AU/RTL8814AU instala el driver de
+  aircrack-ng (ej. github.com/aircrack-ng/rtl8812au).
+
+- wash no muestra nada: comprueba que la interfaz está en modo
+  monitor ("iw dev <iface> info" debe decir "type monitor") y
+  que hay redes con WPS activo cerca.
+
+- El ataque se queda en "Waiting for beacon": BSSID o canal
+  incorrectos, o señal muy débil.
+
+- Tras usar "airmon-ng check kill" puedes quedarte sin red:
+  restaura el servicio con:
+    sudo systemctl start NetworkManager
+
+- bully falla en un router: prueba con reaver (y viceversa).
+
+
+7. CONSEJOS PARA PRUEBAS MÁS RÁPIDAS
+------------------------------------
+- Antes de la fuerza bruta prueba el PIN que viene impreso en la
+  etiqueta del router (opción [2]).
+- Muchos routers tienen un PIN por defecto calculable a partir
+  de su BSSID/SN; busca "default WPS pin <modelo>".
+- bully suele ser más rápido que reaver.
+- Estar cerca del router y con buena señal reduce mucho el tiempo.
+- Reaver tiene un ataque "Pixie Dust" (-K) para routers con
+  PRNG débil: es offline y tarda segundos, pero solo funciona
+  en modelos vulnerables concretos (pruébalo manualmente si la
+  fuerza bruta no avanza).
+- Desactiva el WPS de tu propio router tras las pruebas.
+
+
+8. ARCHIVOS QUE GENERA
+----------------------
+  resultados_wps_<fecha>.txt   Resumen + últimas 60 líneas del ataque
+  log_ataque_<fecha>.txt       (solo con --full-log) salida completa
+
+
+9. EJEMPLO COMPLETO DE SESIÓN
+-----------------------------
+  sudo python3 wifi_wps_tester.py --scan-seconds 45
+  > Elige la antena: 1
+  > airmon-ng check kill: S
+  > (escaneo...)
+  > Elige la red objetivo: 2
+  > Método: 1  (fuerza bruta)
+  > Herramienta: 1  (bully)
+  > ¿Iniciar la prueba? S
+  > ...espera (minutos/horas)...
+  > ¿Intentar conectar para verificar? S
+  > Resultados en: resultados_wps_20260101_123000.txt
+
+======================================
+WiFi WPS Tester — solo para redes propias o autorizadas.
